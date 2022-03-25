@@ -1,34 +1,42 @@
 import csv from 'csv-parser';
 import fs from 'fs';
 import { createObjectCsvWriter } from 'csv-writer';
+
 const csvWriter = createObjectCsvWriter({
-  path: './output.csv',
+  path: './csv/result.csv',
   header: [
-    { id: 'date', title: 'Date' },
-    { id: 'externalId', title: 'External ID' },
-    { id: 'internalId', title: 'Internal ID' },
+    { id: 'createdAt', title: 'createdAt' },
+    { id: 'externalId', title: 'externalId' },
+    { id: 'userId', title: 'userId' },
   ],
 });
 
-const results: any[] = [];
+const newData: any[] = [];
+const filteredData: any[] = [];
 
-fs.createReadStream('./csv/1.csv')
-  .pipe(
-    csv({
-      mapHeaders: ({ header, index }) => {
-        if (index === 0) return 'date';
-        if (index === 1) return 'externalId';
-        if (index === 2) return 'internalId';
-        return header;
-      },
-    })
-  )
+fs.createReadStream('./csv/new_sql_out.csv')
+  .pipe(csv())
   .on('data', (row) => {
-    results.push(row);
+    newData.push(row);
   })
   .on('end', () => {
-    results.sort((a, b) => (a.date > b.date ? 1 : -1));
-    csvWriter.writeRecords(results).then(() => {
-      console.log('Created output.csv');
-    });
+    const newIds = newData.map((e) => e.user_id);
+    // read old data with mapping
+    fs.createReadStream('./csv/mapper.csv')
+      .pipe(csv())
+      .on('data', (row) => {
+        if (newIds.includes(row.userId)) {
+          filteredData.push(row);
+        }
+      })
+      .on('end', () => {
+        const oldIds = filteredData.map((e) => e.userId);
+        // get new IDs that are not in the old mapper
+        const missingIds = newIds.filter((id) => !oldIds.includes(id));
+        console.log(missingIds);
+        filteredData.sort((a, b) => (a.createdAt > b.createdAt ? 1 : -1));
+        csvWriter.writeRecords(filteredData).then(() => {
+          console.log('Created result.csv');
+        });
+      });
   });
